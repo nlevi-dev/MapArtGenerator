@@ -39,8 +39,8 @@ def min_rank(tags):
         tags = [tags]
     return min(HIGHWAY_RANK.get(t, 14) for t in tags)
 
-bbox = (18.889618, 47.321138, 19.243927, 47.636709)
 rng = np.random.default_rng(36)
+bbox = (18.889618, 47.301138, 19.243927, 47.636709)
 
 filename = str(bbox)+".graphml"
 if not os.path.isfile(filename):
@@ -120,10 +120,30 @@ edges = filter_dropout(edges, dropout)
 # graph = ox.utils_graph.get_largest_component(graph, strongly=False)
 # edges = ox.graph_to_gdfs(graph, nodes=False, fill_edge_geometry=True)
 
-ig, ax = plt.subplots(figsize=(8, 8))
-ax.set_aspect("equal")
-ax.axis("off")
+width_map = [
+    1,
+    1,
+    0.8,
+    0.8,
+    0.6,
+    0.6,
+    0.4,
+    0.4,
+    0.4,
+    0.4,
+    0.4,
+    0.4,
+    0.4,
+]
 
-edges.plot(ax=ax, linewidth=0.6, color="black")
+ig, ax = plt.subplots()
+ax.axis("off")
+plt.gca().set_axis_off()
+plt.subplots_adjust(top = 1, bottom = 0, right = 1, left = 0, hspace = 0, wspace = 0)
+plt.margins(0,0)
+
+for i in range(len(width_map)):
+    subset = edges[edges["rank"] == i+1]
+    subset.plot(ax=ax, linewidth=width_map[i], color="black")
 
 plt.show()

@@ -136,7 +136,7 @@ width_map = [
     0.4,
 ]
 
-ig, ax = plt.subplots()
+ig, ax = plt.subplots(figsize=(8.0*420.0/594.0, 8))
 ax.axis("off")
 plt.gca().set_axis_off()
 plt.subplots_adjust(top = 1, bottom = 0, right = 1, left = 0, hspace = 0, wspace = 0)
@@ -146,4 +146,5 @@ for i in range(len(width_map)):
     subset = edges[edges["rank"] == i+1]
     subset.plot(ax=ax, linewidth=width_map[i], color="black")
 
+plt.savefig('map.png', format='png', dpi=1200)
 plt.show()

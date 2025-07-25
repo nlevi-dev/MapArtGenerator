@@ -1,3 +1,5 @@
 /cache
 *.gpkg
 *.graphml
+*.svg
+*.png

@@ -40,23 +40,90 @@ def min_rank(tags):
     return min(HIGHWAY_RANK.get(t, 14) for t in tags)
 
 bbox = (18.889618, 47.321138, 19.243927, 47.636709)
-filename = str(bbox)+".gpkg"
+rng = np.random.default_rng(36)
 
+filename = str(bbox)+".graphml"
 if not os.path.isfile(filename):
     graph = ox.graph_from_bbox(bbox, network_type="all", simplify=True, retain_all=True, truncate_by_edge=False)
-    edges = ox.graph_to_gdfs(graph, nodes=False, fill_edge_geometry=True)
-    edges["rank"] = edges["highway"].apply(min_rank)
-    edges = edges[["geometry", "rank"]]
-    edges.to_file(filename, layer='edges', driver="GPKG")
+    ox.save_graphml(graph, filename)
 else:
-    edges = gpd.read_file(filename, layer='edges')
+    graph = ox.load_graphml(filename)
 
-print(edges["geometry"][0].coords[1])
+edges = ox.graph_to_gdfs(graph, nodes=False, fill_edge_geometry=True)
+edges["rank"] = edges["highway"].apply(min_rank)
+edges = edges[["geometry", "rank"]]
+cx = np.array(edges["geometry"].centroid.x)
+cy = np.array(edges["geometry"].centroid.y)
+edges["cx"] = cx
+edges["cy"] = cy
+ds = np.min(np.array([np.abs(cx - bbox[0]), np.abs(cx - bbox[2]), np.abs(cy - bbox[1]), np.abs(cy - bbox[3])]), axis=0)
+ds = ds / np.max(ds) * -1 + 1
+edges["dist"] = ds
 
-# ig, ax = plt.subplots(figsize=(8, 8))
-# ax.set_aspect("equal")
-# ax.axis("off")
 
-# edges.plot(ax=ax, linewidth=0.6, color="black")
+def grid(cx, cy, GRID=10):
+    x_low, y_low, x_high, y_high = bbox
+    x_edges = np.linspace(x_low, x_high, GRID + 1)
+    y_edges = np.linspace(y_low, y_high, GRID + 1)
+    h, _, _ = np.histogram2d(cy, cx, bins=[y_edges, x_edges])
+    h = np.array(h, dtype=np.float64)
+    return h, x_edges, y_edges
 
-# plt.show()
+def grid_find(x, y, grid_count, x_edges, y_edges):
+    ix = np.searchsorted(x_edges, x, side='right') - 1
+    iy = np.searchsorted(y_edges, y, side='right') - 1
+    ix = min(ix, grid_count.shape[1] - 1)
+    iy = min(iy, grid_count.shape[0] - 1)
+    return grid_count[iy, ix]
+
+def filter_dropout(df, function):
+    drop = []
+    for i in range(len(df)):
+        chance = function(df.iloc[i])
+        drop.append(chance <= rng.random())
+    drop = np.array(drop)
+    return df[drop]
+
+# normalize density
+MIN_RANK = 7
+GRID = 30
+TARGET = 1000000
+area = ((bbox[2] - bbox[0]) / GRID) * ((bbox[3] - bbox[1]) / GRID)
+target = TARGET * area
+d_edges = edges[edges["rank"] >= MIN_RANK]
+d_grid, d_bound_x, d_bound_y = grid(np.array(d_edges["cx"]), np.array(d_edges["cy"]), GRID)
+def d_dropout(row):
+    rank = row["rank"]
+    x = row["cx"]
+    y = row["cy"]
+    if rank >= MIN_RANK:
+        density = grid_find(x, y, d_grid, d_bound_x, d_bound_y)
+        if density < target:
+            return 0
+        return (density - target) / density
+    return 0
+edges = filter_dropout(edges, d_dropout)
+
+def dropout(row):
+    rank = row["rank"]
+    if rank >= MIN_RANK:
+        rank = MIN_RANK
+    dist = row["dist"]
+    threshold = -0.0333333 * rank + 0.933333
+    if dist < threshold:
+        return 0
+    return (1 / (1 - threshold)) * (dist - threshold)
+edges = filter_dropout(edges, dropout)
+
+# graph = graph.edge_subgraph(edges.index).copy()
+# #truncate.largest_component
+# graph = ox.utils_graph.get_largest_component(graph, strongly=False)
+# edges = ox.graph_to_gdfs(graph, nodes=False, fill_edge_geometry=True)
+
+ig, ax = plt.subplots(figsize=(8, 8))
+ax.set_aspect("equal")
+ax.axis("off")
+
+edges.plot(ax=ax, linewidth=0.6, color="black")
+
+plt.show()
